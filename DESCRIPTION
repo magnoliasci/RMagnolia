@@ -1,0 +1,17 @@
+Package: RMagnolia
+Type: Package
+Title: Run Magnolia models within R
+Version: 1.3.15
+Author: Magnolia Sciences
+Maintainer: Magnolia Sciences <team@magnoliasci.com>
+Description: Allows Magnolia ODE models to run within the R environment.
+Depends: rJava, readr
+License: Magnolia EULA
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.1.2
+Suggests: knitr,
+    rmarkdown,
+    ggplot2,
+    dplyr
+VignetteBuilder: knitr

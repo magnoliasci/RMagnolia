@@ -1,0 +1,18 @@
+model VanderPol
+derivative
+
+    cinterval cint = 0.01
+
+    constant xic = -2.0, xdic = 4.0
+
+    constant mu = 2.0
+    xdd = mu*(1 - x^2)*xd - x
+
+    xd  = integ(xdd, xdic)
+    x   = integ(xd, xic)
+
+    constant tstop = 10.0
+    termt(t >= tstop, 'Stopped on time limit')
+
+end ! derivative
+end ! model

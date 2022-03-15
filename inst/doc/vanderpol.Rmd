@@ -1,0 +1,209 @@
+---
+title: "RMagnolia: Build and Run a Model"
+author: "The Magnolia Team"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Van der Pol Oscillator}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  fig.width=5, fig.height=3,
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+The Van der Pol oscillator is a nonlinearly damped, non-conservative oscillator described by the following differential equation:
+
+\[
+  {{{d^2x} \over {dt^2}} - \mu(1 - x^2){{dx} \over {dt}} + x = 0 }
+\]
+
+Solutions to the Van Der Pol equation display a “limit cycle” behavior.  That is, the evolution of solutions with difference initial conditions in phase space eventually reach the same stable orbit.
+
+The Van der Pol differential equation can be encoded on Magnolia as follows:
+
+```{fig.show='hold'}
+model VanderPol
+derivative        
+
+    cinterval cint = 0.01
+
+    constant xic = -2.0, xdic = 4.0
+
+    constant mu = 2.0
+    xdd = mu*(1 - x^2)*xd - x
+ 
+    xd  = integ(xdd, xdic)
+    x   = integ(xd, xic)
+
+    constant tstop = 10.0        
+    termt(t >= tstop, 'Stopped on time limit')    
+
+end ! derivative    
+end ! model
+```
+
+To build and compile this model in R, simply put the CSL code into a string variable in R and pass this
+string to the magnoliaBuild() function.  The returned value is a reference to the executable model object.
+
+```{r, fig.show='hold'}
+library(RMagnolia)
+library(dplyr)
+library(ggplot2)
+
+code = "model VanderPol
+derivative        
+
+    cinterval cint = 0.01
+
+    constant xic = -2.0, xdic = 4.0
+
+    constant mu = 2.0
+    xdd = mu*(1 - x^2)*xd - x
+ 
+    xd  = integ(xdd, xdic)
+    x   = integ(xd, xic)
+
+    constant tstop = 10.0        
+    termt(t >= tstop, 'Stopped on time limit')    
+
+end ! derivative    
+end ! model"
+
+# Build the model
+mdl <- magnoliaBuild(code)
+
+# Indicate which model outputs will be logged
+mdl$prepare("t")
+mdl$prepare("x")
+mdl$prepare("xd")
+
+# Adjust the stopping time to 20.0
+mdl$tstop <- 20
+
+# Run the model
+mdl$run()
+
+# Get time histories of variables we want to plot and load into a data frame
+df <- data.frame(
+  T  = mdl$history("t"),
+  X  = mdl$history("x"),
+  XD = mdl$history("xd")
+)
+
+# Plot the trajectories
+ggplot(data = df) +
+  geom_line(aes(x = T, y = X, color = "X"), size = 1) +
+  geom_line(aes(x = T, y = XD, color = "XD"), size = 1) +
+  labs(title = "Van der Pol Oscillator", x = "Time", y = "X and dX/dt") +
+  theme_bw() +
+  theme(legend.title = element_blank())
+
+# Alternativly, all prepared variables can be loaded into a dataframe
+# automatically by calling magnoliaResults()
+df2 <- magnoliaResults(mdl)
+head(df2)
+
+```
+
+Note in the above example that model variables and constants can be accessed using the $ operator and the lower-case name of the variable or constant.  This is the most direct way to set model parameters prior to a simulation run.  Following the model run (using the run method, see below), the model variables will contain the final values of those quantities at the end of the run.  In order to obtain the time histories of those quantites, the history() method is used (see below).
+
+The example above makes use of a few methods available in the model object returned by magnoliaBuild().
+
+* prepare("varname"): this method is used to specify which model output values should be recorded at each communication interval for later output to the screen, to a file, or on a plot.  Note that the prepare list is cumulative: that is, the prepare command adds the specified model variables to a running list of variables to record.  Note that the prepare method is limited to use with scalar model variables at present.
+
+* run(): this method starts a simulation run.  During the run, any variables on the prepare list are recorded to a file for later retrieval using the history() method.
+
+* history("varname"): this method returns an array containing the value of the specified variable at each communication interval during the simulation run.
+
+Note that we've also shown the use of the magnoliaResults() function, which returns a data frame containing all outputs which were included on the prepare list before the model was last run.  Columns in the data frame correspons to output variables in the model and rows correspond to timepoints at which output values were logged.
+
+One way to illustrate the limit cycle behavior is to superimpose the solution trajectories (phase plots) from several runs using different initial conditions.  The following R script can accomplish this:
+
+```{r, fig.show='hold'}
+code = "model VanderPol
+derivative        
+
+    cinterval cint = 0.01
+
+    constant xic = -2.0, xdic = 4.0
+
+    constant mu = 2.0
+    xdd = mu*(1 - x^2)*xd - x
+ 
+    xd  = integ(xdd, xdic)
+    x   = integ(xd, xic)
+
+    constant tstop = 10.0        
+    termt(t >= tstop, 'Stopped on time limit')    
+
+end ! derivative    
+end ! model"
+
+# Build the model
+# For larger models, it's more convenient to have the model
+# code in a separate file.  In this case, use the "filename"
+# argument of the magnoliaBuild function to specify the name
+# of the file to be built.
+mdl <- magnoliaBuild(filename = "VanderPol.csl")
+
+# Indicate which model outputs will be logged
+# As an alternative to indicating which outputs should be
+# logged one at a time, the "prepareAll" method of the model
+# object can be used to have all outputs logged.
+# For large or complex models though, logging all variables
+# can lead to longer simulation runtimes.
+mdl$prepareAll()
+
+# Adjust the stopping time to 20.0
+mdl$tstop <- 20
+
+# Data frame used to hold the results of individual simulation runs
+sims <- data.frame()
+
+for (i in 1:15)
+{
+    # Generate some random initial values for x and xd
+    mdl$xic  <- runif(1, min=-3, max=3)
+    mdl$xdic <- runif(1, min=-3, max=3)
+
+    # Run the model
+    mdl$run()
+
+    # Get time histories of variables we want to plot and
+    # put into a temporary data frame. 
+    # We'll need a field to uniquely identify each sim run
+    # when we plot the results using ggplot below.
+    df <- data.frame(
+      ID = i,
+      X  = mdl$history("x"),
+      XD = mdl$history("xd")
+    ) 
+    
+    # Append the current simulation results to the collection
+    sims <- sims %>% dplyr::bind_rows(df)
+}
+
+# Convert ID to a factor and sort the data
+sims <- sims %>% dplyr::mutate(ID = factor(ID))
+
+# Make a phase plot using the collected sim runs
+ggplot(data = sims) +
+  geom_path(aes(x = X, y = XD, color = ID), size = 1) +
+  labs(title = "Van der Pol Oscillator, Phase Plot", x = "X", y = "dX/dt") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+```
+
+In the above example, note that we've made use of two additional constructs:
+
+* The prepareAll() method of the model object is a quick way of putting all model outputs on the prepare list, meaning all model outputs will be logged during the course of the simulation run for later analysis or visualization.  Using this function for large/complex models is discouraged, as the computational overhead of logging can degrade performance.
+
+* The "filename" argument of the magnoliaBuild() function indicates that the source code for the model is found in the indicated CSL (text) file.  Specifying a value for the filename argument causes the "code" argument to be ignored.  Having the model source code in an external file can be convenient for large or complex models.
+
